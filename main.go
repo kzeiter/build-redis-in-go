@@ -8,6 +8,7 @@ func main() {
 	s := &store{
 		data: make(map[string]interface{}),
 		list: make(map[string][]string),
+		sets: make(map[string]map[string]bool),
 	}
 
 	listener, err := net.Listen("tcp", ":6379")

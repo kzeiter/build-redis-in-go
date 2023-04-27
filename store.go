@@ -3,11 +3,13 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 )
 
 type store struct {
 	data map[string]interface{}
 	list map[string][]string
+	sets map[string]map[string]bool
 }
 
 func (s *store) set(key string, value interface{}) {
@@ -101,6 +103,55 @@ func (s *store) lIndex(key string, index int) string {
 
 	return s.list[key][index]
 }
+func (s *store) sadd(key string, value string) bool {
+	if s.sets[key] == nil {
+		s.sets[key] = make(map[string]bool)
+	}
+
+	if s.sets[key][value] {
+		return false
+	}
+
+	s.sets[key][value] = true
+
+	return true
+}
+
+func (s *store) srem(key string, value string) bool {
+	if s.sets[key] == nil {
+		return false
+	}
+
+	if !s.sets[key][value] {
+		return false
+	}
+
+	delete(s.sets[key], value)
+
+	return true
+}
+
+func (s *store) smembers(key string) []string {
+	if s.sets[key] == nil {
+		return []string{}
+	}
+
+	members := make([]string, 0, len(s.sets[key]))
+
+	for member := range s.sets[key] {
+		members = append(members, member)
+	}
+
+	return members
+}
+
+func (s *store) sismember(key string, value string) bool {
+	if s.sets[key] == nil {
+		return false
+	}
+
+	return s.sets[key][value]
+}
 
 func (s *store) handleCommand(command string, args []string) string {
 	switch command {
@@ -135,6 +186,21 @@ func (s *store) handleCommand(command string, args []string) string {
 	case "LINDEX":
 		index, _ := strconv.Atoi(args[1])
 		return s.lIndex(args[0], index)
+	case "SADD":
+		return fmt.Sprintf("%v", s.sadd(args[0], args[1]))
+	case "SREM":
+		return fmt.Sprintf("%v", s.srem(args[0], args[1]))
+	case "SMEMBERS":
+		members := s.smembers(args[0])
+		result := ""
+
+		for _, member := range members {
+			result += fmt.Sprintf("%v ", member)
+		}
+
+		return strings.TrimSpace(result)
+	case "SISMEMBER":
+		return fmt.Sprintf("%v", s.sismember(args[0], args[1]))
 	default:
 		return "Unknown command"
 	}
