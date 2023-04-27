@@ -24,7 +24,7 @@ func HandleConnection(conn net.Conn, s *store) {
 		command := parts[0]
 		args := parts[1:]
 
-		response := s.handleCommand(command, args)
+		response := s.handleCommand(command, args, conn)
 
 		fmt.Fprintln(conn, response)
 	}

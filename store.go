@@ -2,14 +2,16 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 )
 
 type store struct {
-	data map[string]interface{}
-	list map[string][]string
-	sets map[string]map[string]bool
+	data        map[string]interface{}
+	list        map[string][]string
+	sets        map[string]map[string]bool
+	subscribers map[string][]client
 }
 
 func (s *store) set(key string, value interface{}) {
@@ -153,7 +155,22 @@ func (s *store) sismember(key string, value string) bool {
 	return s.sets[key][value]
 }
 
-func (s *store) handleCommand(command string, args []string) string {
+func (s *store) subscribe(channel string, conn net.Conn) string {
+	client := client{conn: conn}
+	s.subscribers[channel] = append(s.subscribers[channel], client)
+	return "OK"
+}
+
+func (s *store) publish(channel string, message string) {
+	subscribers, ok := s.subscribers[channel]
+	if ok {
+		for _, subscriber := range subscribers {
+			fmt.Fprintf(subscriber.conn, "+%s\n", message)
+		}
+	}
+}
+
+func (s *store) handleCommand(command string, args []string, conn net.Conn) string {
 	switch command {
 	case "SET":
 		s.set(args[0], args[1])
@@ -201,6 +218,11 @@ func (s *store) handleCommand(command string, args []string) string {
 		return strings.TrimSpace(result)
 	case "SISMEMBER":
 		return fmt.Sprintf("%v", s.sismember(args[0], args[1]))
+	case "SUBSCRIBE":
+		return s.subscribe(args[0], conn)
+	case "PUBLISH":
+		s.publish(args[0], args[1])
+		return "OK"
 	default:
 		return "Unknown command"
 	}
