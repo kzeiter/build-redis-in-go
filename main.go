@@ -5,7 +5,10 @@ import (
 )
 
 func main() {
-	s := &store{data: make(map[string]interface{})}
+	s := &store{
+		data: make(map[string]interface{}),
+		list: make(map[string][]string),
+	}
 
 	listener, err := net.Listen("tcp", ":6379")
 	if err != nil {
