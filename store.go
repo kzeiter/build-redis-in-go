@@ -1,41 +1,54 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net"
+	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
-type store struct {
+type Store struct {
+	mu          sync.RWMutex
 	data        map[string]interface{}
 	list        map[string][]string
 	sets        map[string]map[string]bool
 	subscribers map[string][]client
+	disk        *diskStore
 }
 
-func (s *store) set(key string, value interface{}) {
+func (s *Store) set(key string, value interface{}) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.data[key] = value
+	s.disk.save(s.data)
 }
 
-func (s *store) get(key string) interface{} {
+func (s *Store) get(key string) interface{} {
 	return s.data[key]
 }
 
-func (s *store) del(key string) {
+func (s *Store) del(key string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	delete(s.data, key)
+	s.disk.save(s.data)
 }
 
-func (s *store) setString(key, value string) {
+func (s *Store) setString(key, value string) {
 	s.set(key, value)
 }
 
-func (s *store) getString(key string) string {
+func (s *Store) getString(key string) string {
 	value, _ := s.get(key).(string)
 	return value
 }
 
-func (s *store) setNumber(key string, value string) {
+func (s *Store) setNumber(key string, value string) {
 	number, err := strconv.Atoi(value)
 	if err != nil {
 		return
@@ -43,12 +56,12 @@ func (s *store) setNumber(key string, value string) {
 	s.set(key, number)
 }
 
-func (s *store) getNumber(key string) int {
+func (s *Store) getNumber(key string) int {
 	value, _ := s.get(key).(int)
 	return value
 }
 
-func (s *store) lPush(key string, value string) int {
+func (s *Store) lPush(key string, value string) int {
 	if s.list[key] == nil {
 		s.list[key] = make([]string, 0)
 	}
@@ -58,7 +71,7 @@ func (s *store) lPush(key string, value string) int {
 	return len(s.list[key])
 }
 
-func (s *store) rPush(key string, value string) int {
+func (s *Store) rPush(key string, value string) int {
 	if s.list[key] == nil {
 		s.list[key] = make([]string, 0)
 	}
@@ -68,7 +81,7 @@ func (s *store) rPush(key string, value string) int {
 	return len(s.list[key])
 }
 
-func (s *store) lPop(key string) string {
+func (s *Store) lPop(key string) string {
 	if s.list[key] == nil {
 		return ""
 	}
@@ -79,7 +92,7 @@ func (s *store) lPop(key string) string {
 	return value
 }
 
-func (s *store) rPop(key string) string {
+func (s *Store) rPop(key string) string {
 	if s.list[key] == nil {
 		return ""
 	}
@@ -90,7 +103,7 @@ func (s *store) rPop(key string) string {
 	return value
 }
 
-func (s *store) lLen(key string) int {
+func (s *Store) lLen(key string) int {
 	if s.list[key] == nil {
 		return 0
 	}
@@ -98,14 +111,14 @@ func (s *store) lLen(key string) int {
 	return len(s.list[key])
 }
 
-func (s *store) lIndex(key string, index int) string {
+func (s *Store) lIndex(key string, index int) string {
 	if s.list[key] == nil || index >= len(s.list[key]) || index < 0 {
 		return ""
 	}
 
 	return s.list[key][index]
 }
-func (s *store) sadd(key string, value string) bool {
+func (s *Store) sadd(key string, value string) bool {
 	if s.sets[key] == nil {
 		s.sets[key] = make(map[string]bool)
 	}
@@ -119,7 +132,7 @@ func (s *store) sadd(key string, value string) bool {
 	return true
 }
 
-func (s *store) srem(key string, value string) bool {
+func (s *Store) srem(key string, value string) bool {
 	if s.sets[key] == nil {
 		return false
 	}
@@ -133,7 +146,7 @@ func (s *store) srem(key string, value string) bool {
 	return true
 }
 
-func (s *store) smembers(key string) []string {
+func (s *Store) smembers(key string) []string {
 	if s.sets[key] == nil {
 		return []string{}
 	}
@@ -147,7 +160,7 @@ func (s *store) smembers(key string) []string {
 	return members
 }
 
-func (s *store) sismember(key string, value string) bool {
+func (s *Store) sismember(key string, value string) bool {
 	if s.sets[key] == nil {
 		return false
 	}
@@ -155,13 +168,13 @@ func (s *store) sismember(key string, value string) bool {
 	return s.sets[key][value]
 }
 
-func (s *store) subscribe(channel string, conn net.Conn) string {
+func (s *Store) subscribe(channel string, conn net.Conn) string {
 	client := client{conn: conn}
 	s.subscribers[channel] = append(s.subscribers[channel], client)
 	return "OK"
 }
 
-func (s *store) publish(channel string, message string) {
+func (s *Store) publish(channel string, message string) {
 	subscribers, ok := s.subscribers[channel]
 	if ok {
 		for _, subscriber := range subscribers {
@@ -170,7 +183,7 @@ func (s *store) publish(channel string, message string) {
 	}
 }
 
-func (s *store) handleCommand(command string, args []string, conn net.Conn) string {
+func (s *Store) handleCommand(command string, args []string, conn net.Conn) string {
 	switch command {
 	case "SET":
 		s.set(args[0], args[1])
@@ -226,4 +239,33 @@ func (s *store) handleCommand(command string, args []string, conn net.Conn) stri
 	default:
 		return "Unknown command"
 	}
+}
+
+func NewStore(filename string) (*Store, error) {
+	disk := &diskStore{filename: filename}
+
+	store := &Store{
+		data:        make(map[string]interface{}),
+		list:        make(map[string][]string),
+		sets:        make(map[string]map[string]bool),
+		subscribers: make(map[string][]client),
+		disk:        disk,
+	}
+
+	file, err := os.Open(filename)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+	} else {
+		defer file.Close()
+		err = json.NewDecoder(file).Decode(&store.data)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	store.disk.filename = filename
+
+	return store, nil
 }

@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func HandleConnection(conn net.Conn, s *store) {
+func HandleConnection(conn net.Conn, s *Store) {
 	defer conn.Close()
 
 	scanner := bufio.NewScanner(conn)
