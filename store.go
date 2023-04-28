@@ -8,11 +8,11 @@ import (
 )
 
 type Store struct {
-	data        map[string]interface{}
-	list        map[string][]string
-	sets        map[string]map[string]bool
-	subscribers map[string][]client
-	disk        *diskStore
+	data map[string]interface{}
+	list map[string][]string
+	sets map[string]map[string]bool
+	subs map[string][]client
+	disk *diskStore
 }
 
 func (s *Store) set(key string, value interface{}) {
@@ -160,14 +160,14 @@ func (s *Store) sismember(key string, value string) bool {
 
 func (s *Store) subscribe(channel string, conn net.Conn) string {
 	client := client{conn: conn}
-	s.subscribers[channel] = append(s.subscribers[channel], client)
+	s.subs[channel] = append(s.subs[channel], client)
 	return "OK"
 }
 
 func (s *Store) publish(channel string, message string) {
-	subscribers, ok := s.subscribers[channel]
+	subs, ok := s.subs[channel]
 	if ok {
-		for _, subscriber := range subscribers {
+		for _, subscriber := range subs {
 			fmt.Fprintf(subscriber.conn, "+%s\n", message)
 		}
 	}
@@ -235,11 +235,11 @@ func NewStore(filename string) (*Store, error) {
 	disk := &diskStore{filename: filename}
 
 	store := &Store{
-		data:        make(map[string]interface{}),
-		list:        make(map[string][]string),
-		sets:        make(map[string]map[string]bool),
-		subscribers: make(map[string][]client),
-		disk:        disk,
+		data: make(map[string]interface{}),
+		list: make(map[string][]string),
+		sets: make(map[string]map[string]bool),
+		subs: make(map[string][]client),
+		disk: disk,
 	}
 
 	store.data, _ = store.disk.load()
