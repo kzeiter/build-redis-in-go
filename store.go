@@ -237,7 +237,7 @@ func (s *Store) handleCommand(command string, args []string, conn net.Conn) stri
 	case "SUBSCRIBE":
 		return s.subscribe(args[0], conn)
 	case "PUBLISH":
-		s.publish(args[0], args[1])
+		s.publish(args[0], strings.Join(args[1:], " "))
 		return "OK"
 	default:
 		return "Unknown command"
