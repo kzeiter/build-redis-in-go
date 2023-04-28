@@ -1,17 +1,13 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
-	"os"
 	"strconv"
 	"strings"
-	"sync"
 )
 
 type Store struct {
-	mu          sync.RWMutex
 	data        map[string]interface{}
 	list        map[string][]string
 	sets        map[string]map[string]bool
@@ -20,9 +16,6 @@ type Store struct {
 }
 
 func (s *Store) set(key string, value interface{}) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.data[key] = value
 	s.disk.save(s.data)
 }
@@ -32,9 +25,6 @@ func (s *Store) get(key string) interface{} {
 }
 
 func (s *Store) del(key string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	delete(s.data, key)
 	s.disk.save(s.data)
 }
@@ -252,20 +242,7 @@ func NewStore(filename string) (*Store, error) {
 		disk:        disk,
 	}
 
-	file, err := os.Open(filename)
-	if err != nil {
-		if !os.IsNotExist(err) {
-			return nil, err
-		}
-	} else {
-		defer file.Close()
-		err = json.NewDecoder(file).Decode(&store.data)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	store.disk.filename = filename
+	store.data, _ = store.disk.load()
 
 	return store, nil
 }

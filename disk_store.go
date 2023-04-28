@@ -3,13 +3,18 @@ package main
 import (
 	"encoding/gob"
 	"os"
+	"sync"
 )
 
 type diskStore struct {
+	mu       sync.RWMutex
 	filename string
 }
 
 func (d *diskStore) save(data map[string]interface{}) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	file, err := os.Create(d.filename)
 	if err != nil {
 		return err
@@ -26,6 +31,9 @@ func (d *diskStore) save(data map[string]interface{}) error {
 }
 
 func (d *diskStore) load() (map[string]interface{}, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
 	file, err := os.Open(d.filename)
 	if err != nil {
 		return nil, err
