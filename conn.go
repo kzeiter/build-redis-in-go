@@ -16,7 +16,7 @@ func HandleConnection(conn net.Conn, s *Store) {
 		input := scanner.Text()
 		parts := strings.Split(input, " ")
 
-		if len(parts) < 2 {
+		if len(parts) < 2 || (parts[0] == "PUBLISH" && len(parts) < 3) {
 			fmt.Fprintln(conn, "ERROR")
 			continue
 		}
