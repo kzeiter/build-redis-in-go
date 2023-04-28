@@ -11,7 +11,7 @@ type diskStore struct {
 	filename string
 }
 
-func (d *diskStore) save(data map[string]interface{}) error {
+func (d *diskStore) save(data map[string]string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -30,7 +30,7 @@ func (d *diskStore) save(data map[string]interface{}) error {
 	return nil
 }
 
-func (d *diskStore) load() (map[string]interface{}, error) {
+func (d *diskStore) load() (map[string]string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
@@ -41,7 +41,9 @@ func (d *diskStore) load() (map[string]interface{}, error) {
 	defer file.Close()
 
 	decoder := gob.NewDecoder(file)
-	var data map[string]interface{}
+
+	data := make(map[string]string)
+
 	err = decoder.Decode(&data)
 	if err != nil {
 		return nil, err

@@ -8,19 +8,21 @@ import (
 )
 
 type Store struct {
-	data map[string]interface{}
+	data map[string]string
 	list map[string][]string
 	sets map[string]map[string]bool
 	subs map[string][]client
 	disk *diskStore
 }
 
-func (s *Store) set(key string, value interface{}) {
+func (s *Store) set(key string, value string) string {
 	s.data[key] = value
 	s.disk.save(s.data)
+
+	return value
 }
 
-func (s *Store) get(key string) interface{} {
+func (s *Store) get(key string) string {
 	return s.data[key]
 }
 
@@ -29,26 +31,40 @@ func (s *Store) del(key string) {
 	s.disk.save(s.data)
 }
 
-func (s *Store) setString(key, value string) {
-	s.set(key, value)
+func (s *Store) incr(key string) int {
+	value, _ := strconv.Atoi(s.get(key))
+
+	s.set(key, strconv.Itoa(value+1))
+
+	return value + 1
 }
 
-func (s *Store) getString(key string) string {
-	value, _ := s.get(key).(string)
-	return value
+func (s *Store) incrBy(key string, incr string) int {
+	number, _ := strconv.Atoi(incr)
+
+	value, _ := strconv.Atoi(s.get(key))
+
+	s.set(key, strconv.Itoa(value+number))
+
+	return value + number
 }
 
-func (s *Store) setNumber(key string, value string) {
-	number, err := strconv.Atoi(value)
-	if err != nil {
-		return
-	}
-	s.set(key, number)
+func (s *Store) decr(key string) int {
+	value, _ := strconv.Atoi(s.get(key))
+
+	s.set(key, strconv.Itoa(value-1))
+
+	return value - 1
 }
 
-func (s *Store) getNumber(key string) int {
-	value, _ := s.get(key).(int)
-	return value
+func (s *Store) decrBy(key string, decr string) int {
+	number, _ := strconv.Atoi(decr)
+
+	value, _ := strconv.Atoi(s.get(key))
+
+	s.set(key, strconv.Itoa(value-number))
+
+	return value - number
 }
 
 func (s *Store) lPush(key string, value string) int {
@@ -176,23 +192,20 @@ func (s *Store) publish(channel string, message string) {
 func (s *Store) handleCommand(command string, args []string, conn net.Conn) string {
 	switch command {
 	case "SET":
-		s.set(args[0], args[1])
-		return "OK"
+		return s.set(args[0], strings.Join(args[1:], " "))
 	case "GET":
-		return fmt.Sprintf("%v", s.get(args[0]))
+		return s.get(args[0])
 	case "DEL":
 		s.del(args[0])
 		return "OK"
-	case "SETSTR":
-		s.setString(args[0], args[1])
-		return "OK"
-	case "GETSTR":
-		return s.getString(args[0])
-	case "SETNUM":
-		s.setNumber(args[0], args[1])
-		return "OK"
-	case "GETNUM":
-		return fmt.Sprintf("%v", s.getNumber(args[0]))
+	case "INCR":
+		return fmt.Sprintf("%v", s.incr(args[0]))
+	case "INCRBY":
+		return fmt.Sprintf("%v", s.incrBy(args[0], args[1]))
+	case "DECR":
+		return fmt.Sprintf("%v", s.decr(args[0]))
+	case "DECRBY":
+		return fmt.Sprintf("%v", s.decrBy(args[0], args[1]))
 	case "LPUSH":
 		return fmt.Sprintf("%v", s.lPush(args[0], args[1]))
 	case "RPUSH":
@@ -235,14 +248,17 @@ func NewStore(filename string) (*Store, error) {
 	disk := &diskStore{filename: filename}
 
 	store := &Store{
-		data: make(map[string]interface{}),
+		data: make(map[string]string),
 		list: make(map[string][]string),
 		sets: make(map[string]map[string]bool),
 		subs: make(map[string][]client),
 		disk: disk,
 	}
 
-	store.data, _ = store.disk.load()
+	data, _ := store.disk.load()
+	if len(data) != 0 {
+		store.data = data
+	}
 
 	return store, nil
 }
